@@ -9,17 +9,20 @@
 </head>
 <body>
 
-<nav>
-  <div class="brand">
-    <img src="assets/logo.png">
-    <h2>Akasa VA</h2>
+<nav class="navbar">
+  <div class="nav-left">
+    <img src="assets/logo.png" alt="Akasa VA">
+    <span>Akasa VA</span>
   </div>
-  <div>
+  <div class="nav-right">
     <a href="index.html">Home</a>
+    <a href="about.html">About</a>
     <a href="fleet.html">Fleet</a>
-    <a href="routes.html">Routes</a>
+    <a href="destinations.html">Destinations</a>
+    <a href="join.html">Join</a>
   </div>
 </nav>
+
 
 <div class="section" style="padding-bottom:20px">
   <h2 style="text-align:center">Our Destinations</h2>
@@ -28,7 +31,7 @@
 <div id="map"></div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="js/destinations-map.js"></script>
+<script src="js/destination-map.js"></script>
 
 </body>
 </html>
