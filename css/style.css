@@ -62,7 +62,7 @@ nav a:hover {
       rgba(0,0,0,0.55),
       rgba(0,0,0,0.75)
     ),
-    url("../assets/hero.jpg") center / cover no-repeat;
+    url("../assets/hero.png") center / cover no-repeat;
   display: flex;
   align-items: center;
   justify-content: center;
