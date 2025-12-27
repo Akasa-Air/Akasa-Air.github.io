@@ -29,10 +29,13 @@
   <h2 style="text-align:center">Our Destinations</h2>
 </div>
 
-<button id="toggleAnimation" class="map-toggle">
-  ✈️ Animation: ON
-</button>
 <div id="map"></div>
+
+<button onclick="toggleFlights()"
+        style="position:fixed;bottom:20px;right:20px;z-index:999">
+  Toggle Flights
+</button>
+
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="js/map.js"></script>
