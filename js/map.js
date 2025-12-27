@@ -1,10 +1,8 @@
-// map.js
-// FINAL – imports all airports from airports.json and animates routes from flights.json
-
-// ================= MAP SETUP =================
+// ==========================
+// MAP INITIALIZATION
+// ==========================
 const map = L.map("map", {
-  zoomControl: false,
-  preferCanvas: true
+  zoomControl: false
 }).setView([22.5, 78.9], 5);
 
 L.tileLayer(
@@ -12,155 +10,164 @@ L.tileLayer(
   { attribution: "© OpenStreetMap © CARTO" }
 ).addTo(map);
 
-// ================= HELPERS =================
-function bearing(from, to) {
-  const lat1 = from[0] * Math.PI / 180;
-  const lat2 = to[0] * Math.PI / 180;
-  const dLon = (to[1] - from[1]) * Math.PI / 180;
+// ==========================
+// GLOBAL STATE
+// ==========================
+let airportsData = {};
+let routesData = [];
+let honRoutesData = [];
+let routeLayer = L.layerGroup().addTo(map);
+let planeLayer = L.layerGroup().addTo(map);
 
-  const y = Math.sin(dLon) * Math.cos(lat2);
-  const x =
-    Math.cos(lat1) * Math.sin(lat2) -
-    Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
+// ==========================
+// LOAD DATA
+// ==========================
+Promise.all([
+  fetch("data/airports.json").then(r => r.json()),
+  fetch("data/flights.json").then(r => r.json()),
+  fetch("data/hon-circle.json").then(r => r.json())
+]).then(([airports, flights, honFlights]) => {
+  airportsData = airports;
+  routesData = flights;
+  honRoutesData = honFlights;
 
-  return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+  drawAirports();
+  startRandomAnimation();
+});
+
+// ==========================
+// DRAW AIRPORTS
+// ==========================
+function drawAirports() {
+  Object.entries(airportsData).forEach(([icao, a]) => {
+    const isHub = icao === "VABB"; // Mumbai hub
+
+    const marker = L.circleMarker([a.lat, a.lng], {
+      radius: isHub ? 10 : 6,
+      fillColor: isHub ? "#ff2d55" : "#ffcc00",
+      fillOpacity: 0.95,
+      color: "#000",
+      weight: 1
+    }).addTo(map);
+
+    marker.bindPopup(`<b>${icao}</b><br>${a.city}`);
+
+    marker.on("click", () => {
+      drawRoutesFromAirport(icao);
+    });
+  });
 }
 
-function curvedPath(a, b, curvature = 0.25) {
+// ==========================
+// DRAW ROUTES FROM AIRPORT
+// ==========================
+function drawRoutesFromAirport(icao) {
+  routeLayer.clearLayers();
+
+  const allRoutes = [...routesData, ...honRoutesData];
+
+  allRoutes.forEach(r => {
+    if (r["ORIGIN ICAO"] !== icao) return;
+
+    const from = airportsData[r["ORIGIN ICAO"]];
+    const to = airportsData[r["DESTINATION ICAO"]];
+    if (!from || !to) return;
+
+    const isHON = honRoutesData.includes(r);
+
+    const curve = generateCurve(
+      [from.lat, from.lng],
+      [to.lat, to.lng]
+    );
+
+    const polyline = L.polyline(curve, {
+      color: isHON ? "#00d4ff" : "#ffcc00",
+      weight: 2,
+      dashArray: "6,8",
+      opacity: 0.8
+    }).addTo(routeLayer);
+
+    polyline.bindTooltip(
+      `<b>${r["ROUTE FLIGHT NO."]}</b><br>
+       Aircraft: ${r["ASSIGNED AIRCRAFTS"]}<br>
+       Price: $${r["Ticket Price"]}<br>
+       Status: ${r["Status"]}`,
+      { sticky: true }
+    );
+
+    polyline.on("mouseover", () => polyline.setStyle({ weight: 4 }));
+    polyline.on("mouseout", () => polyline.setStyle({ weight: 2 }));
+  });
+}
+
+// ==========================
+// CURVE GENERATOR
+// ==========================
+function generateCurve(from, to) {
   const latlngs = [];
-  const offsetX = b[1] - a[1];
-  const offsetY = b[0] - a[0];
-  const r = Math.sqrt(offsetX ** 2 + offsetY ** 2);
-  const theta = Math.atan2(offsetY, offsetX);
+  const steps = 80;
 
-  const midX = (a[1] + b[1]) / 2 + curvature * r * Math.cos(theta + Math.PI / 2);
-  const midY = (a[0] + b[0]) / 2 + curvature * r * Math.sin(theta + Math.PI / 2);
-
-  for (let t = 0; t <= 1; t += 0.02) {
-    const x =
-      (1 - t) * (1 - t) * a[1] +
-      2 * (1 - t) * t * midX +
-      t * t * b[1];
-    const y =
-      (1 - t) * (1 - t) * a[0] +
-      2 * (1 - t) * t * midY +
-      t * t * b[0];
-    latlngs.push([y, x]);
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    const lat =
+      from[0] * (1 - t) + to[0] * t + Math.sin(Math.PI * t) * 2;
+    const lng =
+      from[1] * (1 - t) + to[1] * t;
+    latlngs.push([lat, lng]);
   }
   return latlngs;
 }
 
-// ================= LOAD DATA =================
-Promise.all([
-  fetch("data/airports.json").then(r => r.json()),
-  fetch("data/flights.json").then(r => r.json())
-]).then(([airports, flights]) => {
+// ==========================
+// PLANE ANIMATION
+// ==========================
+function startRandomAnimation() {
+  setInterval(() => {
+    animatePlane();
+  }, 6000);
+}
 
-  const airportMarkers = {};
-  const routesByAirport = {};
+function animatePlane() {
+  const r = routesData[Math.floor(Math.random() * routesData.length)];
+  const from = airportsData[r["ORIGIN ICAO"]];
+  const to = airportsData[r["DESTINATION ICAO"]];
+  if (!from || !to) return;
 
-  // -------- AIRPORT MARKERS --------
-  Object.entries(airports).forEach(([icao, a]) => {
-    const isHub = icao === "VABB";
+  const path = generateCurve(
+    [from.lat, from.lng],
+    [to.lat, to.lng]
+  );
 
-    const marker = L.circleMarker([a.lat, a.lng], {
-      radius: isHub ? 10 : 6,
-      fillColor: isHub ? "#ff00ff" : "#ff6a00",
-      fillOpacity: 0.95,
-      color: "#000",
-      weight: 1
-    })
-      .addTo(map)
-      .bindPopup(`<b>${icao}</b><br>${a.name}${isHub ? "<br><b>Akasa Hub</b>" : ""}`);
+  const plane = L.marker(path[0], {
+    icon: L.divIcon({
+      html: "✈️",
+      className: "plane-icon",
+      iconSize: [20, 20]
+    }),
+    opacity: 0
+  }).addTo(planeLayer);
 
-    airportMarkers[icao] = marker;
-    routesByAirport[icao] = [];
-  });
+  let i = 0;
+  const interval = setInterval(() => {
+    if (i >= path.length) {
+      clearInterval(interval);
+      map.removeLayer(plane);
+      return;
+    }
 
-  // -------- ROUTES INDEX --------
-  flights.forEach(f => {
-    const o = f["ORIGIN ICAO"];
-    const d = f["DESTINATION ICAO"];
-    if (!airports[o] || !airports[d]) return;
-    routesByAirport[o].push(f);
-  });
+    const next = path[Math.min(i + 1, path.length - 1)];
+    const curr = path[i];
+    const heading = Math.atan2(
+      next[1] - curr[1],
+      next[0] - curr[0]
+    ) * (180 / Math.PI);
 
-  // -------- DRAW ROUTES ON CLICK --------
-  let activeRoutes = [];
+    plane.setLatLng(curr);
+    plane.setOpacity(i < 10 || i > path.length - 10 ? 0.3 : 1);
 
-  Object.entries(airportMarkers).forEach(([icao, marker]) => {
-    marker.on("click", () => {
-      activeRoutes.forEach(r => map.removeLayer(r));
-      activeRoutes = [];
+    plane.getElement().style.transform =
+      `rotate(${heading}deg)`;
 
-      routesByAirport[icao].forEach(route => {
-        const from = [airports[route["ORIGIN ICAO"]].lat, airports[route["ORIGIN ICAO"]].lng];
-        const to = [airports[route["DESTINATION ICAO"]].lat, airports[route["DESTINATION ICAO"]].lng];
-
-        const path = curvedPath(from, to);
-        const line = L.polyline(path, {
-          color: "#ffcc00",
-          weight: 2,
-          dashArray: "6 8",
-          opacity: 0.7
-        })
-          .addTo(map)
-          .bindTooltip(
-            `<b>${route["ROUTE FLIGHT NO."]}</b><br>
-             Aircraft: ${route["ASSIGNED AIRCRAFTS"]}<br>
-             Ticket: $${route["Ticket Price"]}<br>
-             Status: ${route["Status"]}`,
-            { sticky: true }
-          );
-
-        line.on("mouseover", () => line.setStyle({ weight: 4, opacity: 1 }));
-        line.on("mouseout", () => line.setStyle({ weight: 2, opacity: 0.7 }));
-
-        activeRoutes.push(line);
-
-        animatePlane(from, to);
-      });
-    });
-  });
-
-  // -------- PLANE ANIMATION --------
-  function animatePlane(from, to) {
-    const path = curvedPath(from, to);
-    const heading = bearing(from, to);
-
-    const planeIcon = L.divIcon({
-      html: `<div style="
-        transform: rotate(${heading}deg);
-        font-size:18px;
-        opacity:0;
-        transition: opacity 1s;
-      ">✈️</div>`,
-      iconSize: [20, 20],
-      className: ""
-    });
-
-    const plane = L.marker(path[0], { icon: planeIcon }).addTo(map);
-    let i = 0;
-
-    const fadeIn = () => {
-      plane.getElement().style.opacity = 1;
-    };
-
-    const fadeOut = () => {
-      plane.getElement().style.opacity = 0;
-    };
-
-    setTimeout(fadeIn, 100);
-
-    const interval = setInterval(() => {
-      i++;
-      if (i >= path.length) {
-        fadeOut();
-        setTimeout(() => map.removeLayer(plane), 1000);
-        clearInterval(interval);
-      } else {
-        plane.setLatLng(path[i]);
-      }
-    }, 80);
-  }
-});
+    i++;
+  }, 60);
+}
