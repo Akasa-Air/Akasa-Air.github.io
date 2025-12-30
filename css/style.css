@@ -148,8 +148,15 @@ nav h2 {
 }
 .plane {
   font-size: 18px;
-  transition: opacity 0.6s linear;
   transform-origin: center;
+  transition: transform 0.15s linear;
+}
+.legend {
+  background: rgba(0, 0, 0, 0.7);
+  color: #fff;
+  padding: 8px;
+  border-radius: 6px;
+  font-size: 12px;
 }
 
 .toggle-btn {

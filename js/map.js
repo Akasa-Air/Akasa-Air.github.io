@@ -1,23 +1,24 @@
 // =======================================
-// AKASA VA – FINAL UNIFIED MAP.JS
-// Single map instance
-// Works with clean flights.json keys
-// Toggle flights ON/OFF
+// AKASA VA – FINAL MAP.JS (SMOOTH + DARK)
 // =======================================
 
 // ---------- MAP ----------
-const map = L.map("map", { zoomControl: false }).setView([22.5, 78.9], 5);
+const map = L.map("map", {
+  zoomControl: false,
+  preferCanvas: true
+}).setView([22.5, 78.9], 5);
 
+// Dark mode basemap
 L.tileLayer(
-  "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
-  { attribution: "© OpenStreetMap contributors © CARTO" }
+  "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
+  { attribution: "© OpenStreetMap © CARTO" }
 ).addTo(map);
 
 // ---------- GLOBALS ----------
 const airportMarkers = {};
 const flightLayer = L.layerGroup().addTo(map);
-let animationInterval = null;
 let flightsVisible = true;
+let animationInterval = null;
 
 // ---------- LOAD DATA ----------
 Promise.all([
@@ -38,7 +39,7 @@ function drawAirports(airports) {
 
     const marker = L.circleMarker([a.lat, a.lng], {
       radius: isHub ? 10 : 6,
-      fillColor: isHub ? "#ff00ff" : "#ffcc00",
+      fillColor: isHub ? "#ff00ff" : "#ff6a00",
       fillOpacity: 0.95,
       color: "#000",
       weight: 1
@@ -65,10 +66,7 @@ function enableAirportSelection(airports, flights) {
           const to = airports[f.destination];
           if (!from || !to) return;
 
-          const route = curvedLine(
-            [from.lat, from.lng],
-            [to.lat, to.lng]
-          )
+          curvedLine([from.lat, from.lng], [to.lat, to.lng])
             .addTo(flightLayer)
             .bindTooltip(
               `<b>${f.flightNo}</b><br>
@@ -76,9 +74,7 @@ function enableAirportSelection(airports, flights) {
                Ticket: $${f.price}<br>
                Status: ${f.status}`,
               { sticky: true }
-            )
-            .on("mouseover", e => e.target.setStyle({ weight: 4 }))
-            .on("mouseout", e => e.target.setStyle({ weight: 2 }));
+            );
         });
     });
   });
@@ -86,18 +82,14 @@ function enableAirportSelection(airports, flights) {
 
 // ---------- CURVED ROUTE ----------
 function curvedLine(from, to) {
-  const offset = Math.min(
-    0.25,
-    Math.abs(from[0] - to[0]) * 0.3
-  );
-
+  const offset = Math.min(0.25, Math.abs(from[0] - to[0]) * 0.3);
   const midLat = (from[0] + to[0]) / 2 + offset;
   const midLng = (from[1] + to[1]) / 2;
 
   return L.polyline(
     [from, [midLat, midLng], to],
     {
-      color: "#ff9900",
+      color: "#ff6a00",
       weight: 2,
       dashArray: "6 8",
       opacity: 0.9
@@ -105,7 +97,7 @@ function curvedLine(from, to) {
   );
 }
 
-// ---------- PLANE ANIMATION ----------
+// ---------- PLANE ANIMATION (SMOOTH) ----------
 function startPlaneAnimation(airports, flights) {
   if (animationInterval) clearInterval(animationInterval);
 
@@ -118,7 +110,7 @@ function startPlaneAnimation(airports, flights) {
     if (!from || !to) return;
 
     animatePlane(from, to);
-  }, 6000);
+  }, 5500);
 }
 
 function animatePlane(from, to) {
@@ -131,12 +123,20 @@ function animatePlane(from, to) {
   const marker = L.marker([from.lat, from.lng], { icon })
     .addTo(flightLayer);
 
-  let t = 0;
-  const steps = 240;
+  const start = performance.now();
+  const duration = 6000;
 
-  const interval = setInterval(() => {
-    t++;
-    const p = t / steps;
+  // correct heading
+  const heading =
+    Math.atan2(to.lng - from.lng, to.lat - from.lat) * 180 / Math.PI;
+
+  function step(now) {
+    const t = Math.min((now - start) / duration, 1);
+
+    // easing (smooth accel/decel)
+    const p = t < 0.5
+      ? 2 * t * t
+      : 1 - Math.pow(-2 * t + 2, 2) / 2;
 
     const lat =
       from.lat + (to.lat - from.lat) * p +
@@ -145,8 +145,7 @@ function animatePlane(from, to) {
     const lng =
       from.lng + (to.lng - from.lng) * p;
 
-    const heading =
-      Math.atan2(to.lng - from.lng, to.lat - from.lat) * 180 / Math.PI;
+    marker.setLatLng([lat, lng]);
 
     const el = marker.getElement();
     if (el) {
@@ -156,26 +155,26 @@ function animatePlane(from, to) {
         p > 0.9 ? (1 - p) * 10 : 1;
     }
 
-    marker.setLatLng([lat, lng]);
-
-    if (t >= steps) {
-      clearInterval(interval);
+    if (t < 1) {
+      requestAnimationFrame(step);
+    } else {
       flightLayer.removeLayer(marker);
     }
-  }, 30);
+  }
+
+  requestAnimationFrame(step);
 }
 
-// ---------- TOGGLE BUTTON ----------
+// ---------- TOGGLE ----------
 function setupToggle() {
   const btn = document.getElementById("toggleFlights");
   if (!btn) return;
 
   btn.onclick = () => {
-    if (flightsVisible) {
-      map.removeLayer(flightLayer);
-    } else {
-      map.addLayer(flightLayer);
-    }
+    flightsVisible
+      ? map.removeLayer(flightLayer)
+      : map.addLayer(flightLayer);
+
     flightsVisible = !flightsVisible;
   };
 }
@@ -188,7 +187,7 @@ function addLegend() {
     const div = L.DomUtil.create("div", "legend");
     div.innerHTML = `
       <strong>Akasa VA</strong><br>
-      <span style="background:#ffcc00"></span> Destination<br>
+      <span style="background:#ff6a00"></span> Route<br>
       <span style="background:#ff00ff"></span> Hub (Mumbai)
     `;
     return div;
