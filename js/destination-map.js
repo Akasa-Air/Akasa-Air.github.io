@@ -1,10 +1,6 @@
-// Initialize map (India focused)
-const map = L.map("map").setView([22.5, 78.9], 5);
+const flightLayer = L.layerGroup().addTo(map);
+curve.addTo(flightLayer);
 
-// Light airline-style basemap
-L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
-  attribution: "© OpenStreetMap contributors © CARTO"
-}).addTo(map);
 
 // Load data
 Promise.all([
@@ -15,9 +11,9 @@ Promise.all([
   const destinations = {};
 
   flights.forEach(flight => {
-    const origin = flight["Unnamed: 0"];
-    const dest = flight["Unnamed: 1"];
-    const status = (flight["Unnamed: 5"] || "").toLowerCase();
+    const origin = flight.origin;
+    const dest = flight.destination;
+    const status = (flight.status || "").toLowerCase();
 
     if (!origin || origin === "ORIGIN ICAO") return;
 
